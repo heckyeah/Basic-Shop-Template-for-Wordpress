@@ -23,16 +23,19 @@ get_header();
 				$products = new WP_Query( $args );
 
 				if ( $products->have_posts() ) :
-					?>
-					<div class="products-grid">
-						<?php
-						while ( $products->have_posts() ) :
-							$products->the_post();
-							wc_get_template_part( 'content', 'product' );
-						endwhile;
-						?>
-					</div>
-					<?php
+					// Set up WooCommerce loop
+					wc_set_loop_prop( 'name', 'homepage' );
+					wc_set_loop_prop( 'columns', 4 );
+					
+					woocommerce_product_loop_start();
+					
+					while ( $products->have_posts() ) :
+						$products->the_post();
+						wc_get_template_part( 'content', 'product' );
+					endwhile;
+					
+					woocommerce_product_loop_end();
+					
 					wp_reset_postdata();
 				else :
 					?>

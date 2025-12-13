@@ -54,10 +54,21 @@ function basic_shop_theme_scripts() {
 	wp_enqueue_style( 'basic-shop-theme-woocommerce', get_template_directory_uri() . '/assets/css/woocommerce.css', array( 'basic-shop-theme-main' ), '1.0.2' );
 
 	// Scripts
+	wp_enqueue_script( 'basic-shop-theme-navigation', get_template_directory_uri() . '/assets/js/navigation.js', array( 'jquery' ), '1.0.0', true );
 	wp_enqueue_script( 'basic-shop-theme-minicart', get_template_directory_uri() . '/assets/js/minicart.js', array( 'jquery' ), '1.0.0', true );
 	wp_enqueue_script( 'basic-shop-theme-product-gallery', get_template_directory_uri() . '/assets/js/product-gallery.js', array( 'jquery' ), '1.0.0', true );
 	wp_enqueue_script( 'basic-shop-theme-last-viewed', get_template_directory_uri() . '/assets/js/last-viewed.js', array( 'jquery' ), '1.0.0', true );
 	wp_enqueue_script( 'basic-shop-theme-toast', get_template_directory_uri() . '/assets/js/toast.js', array( 'jquery' ), '1.0.0', true );
+	
+	// Shop filters script (only on shop/archive pages)
+	if ( is_shop() || is_product_category() || is_product_tag() || is_product_taxonomy() ) {
+		wp_enqueue_script( 'basic-shop-theme-filters', get_template_directory_uri() . '/assets/js/shop-filters.js', array( 'jquery' ), '1.0.0', true );
+		wp_localize_script( 'basic-shop-theme-filters', 'basicShopFilters', array(
+			'ajaxurl' => admin_url( 'admin-ajax.php' ),
+			'nonce'   => wp_create_nonce( 'basic-shop-filters-nonce' ),
+			'shopUrl' => wc_get_page_permalink( 'shop' ),
+		) );
+	}
 
 	// Localize scripts
 	wp_localize_script( 'basic-shop-theme-minicart', 'basicShopAjax', array(
@@ -96,6 +107,16 @@ function basic_shop_theme_woocommerce_setup() {
 	remove_action( 'woocommerce_before_main_content', 'woocommerce_output_content_wrapper', 10 );
 	remove_action( 'woocommerce_after_main_content', 'woocommerce_output_content_wrapper_end', 10 );
 
+	// Remove breadcrumbs from shop page
+	remove_action( 'woocommerce_before_main_content', 'woocommerce_breadcrumb', 20 );
+
+	// Remove shop heading/title from shop page
+	remove_action( 'woocommerce_shop_loop_header', 'woocommerce_product_taxonomy_archive_header', 10 );
+	
+	// Remove default result count and ordering from before_shop_loop hook (we'll output them manually in a container)
+	remove_action( 'woocommerce_before_shop_loop', 'woocommerce_result_count', 20 );
+	remove_action( 'woocommerce_before_shop_loop', 'woocommerce_catalog_ordering', 30 );
+
 	// Add custom wrappers
 	add_action( 'woocommerce_before_main_content', 'basic_shop_theme_wrapper_start', 10 );
 	add_action( 'woocommerce_after_main_content', 'basic_shop_theme_wrapper_end', 10 );
@@ -107,6 +128,8 @@ add_action( 'init', 'basic_shop_theme_woocommerce_setup' );
  */
 function basic_shop_theme_wrapper_start() {
 	if ( is_product() ) {
+		echo '<div id="primary" class="content-area content-area-fullwidth"><main id="main" class="site-main site-main-fullwidth">';
+	} elseif ( is_shop() || is_product_category() || is_product_tag() || is_product_taxonomy() ) {
 		echo '<div id="primary" class="content-area content-area-fullwidth"><main id="main" class="site-main site-main-fullwidth">';
 	} else {
 		echo '<div id="primary" class="content-area"><main id="main" class="site-main">';
@@ -635,9 +658,14 @@ function basic_shop_theme_related_products_args( $args ) {
 add_filter( 'woocommerce_output_related_products_args', 'basic_shop_theme_related_products_args' );
 
 /**
- * Remove add to cart button from Related Products and Last Viewed Products
+ * Remove add to cart button from shop page, related products, and last viewed products
  */
 function basic_shop_theme_remove_add_to_cart_from_related( $link, $product ) {
+	// Remove from shop page
+	if ( is_shop() || is_product_category() || is_product_tag() || is_product_taxonomy() ) {
+		return '';
+	}
+	
 	// Check if we're in related products or last viewed products section
 	$backtrace = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 10 );
 	
@@ -727,4 +755,433 @@ function basic_shop_theme_product_title_wrapper_close() {
 	echo '</div>';
 }
 add_action( 'woocommerce_single_product_summary', 'basic_shop_theme_product_title_wrapper_close', 6 );
+
+/**
+ * Get price range for all products
+ */
+function basic_shop_theme_get_price_range() {
+	global $wpdb;
+	
+	$min_price = $wpdb->get_var(
+		"SELECT MIN(meta_value + 0) 
+		FROM {$wpdb->postmeta} 
+		WHERE meta_key IN ('_price', '_regular_price') 
+		AND meta_value != ''"
+	);
+	
+	$max_price = $wpdb->get_var(
+		"SELECT MAX(meta_value + 0) 
+		FROM {$wpdb->postmeta} 
+		WHERE meta_key IN ('_price', '_regular_price') 
+		AND meta_value != ''"
+	);
+	
+	return array(
+		'min' => floatval( $min_price ? $min_price : 0 ),
+		'max' => floatval( $max_price ? $max_price : 1000 ),
+	);
+}
+
+/**
+ * AJAX handler for filtering products
+ */
+function basic_shop_theme_filter_products() {
+	check_ajax_referer( 'basic-shop-filters-nonce', 'nonce' );
+	
+	// Get filter parameters
+	$search = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
+	$categories = isset( $_POST['categories'] ) ? array_map( 'absint', (array) $_POST['categories'] ) : array();
+	// Get price values - only set if they're actually provided, not empty, and greater than 0
+	$min_price = '';
+	$max_price = '';
+	if ( isset( $_POST['min_price'] ) && $_POST['min_price'] !== '' && $_POST['min_price'] !== null && $_POST['min_price'] !== '0' ) {
+		$min_price_float = floatval( $_POST['min_price'] );
+		// Only keep if it's greater than 0
+		if ( $min_price_float > 0 ) {
+			$min_price = $min_price_float;
+		}
+	}
+	if ( isset( $_POST['max_price'] ) && $_POST['max_price'] !== '' && $_POST['max_price'] !== null && $_POST['max_price'] !== '0' ) {
+		$max_price_float = floatval( $_POST['max_price'] );
+		// Only keep if it's greater than 0
+		if ( $max_price_float > 0 ) {
+			$max_price = $max_price_float;
+		}
+	}
+	$stock_status = isset( $_POST['stock_status'] ) ? sanitize_text_field( wp_unslash( $_POST['stock_status'] ) ) : '';
+	$on_sale = isset( $_POST['on_sale'] ) && '1' === $_POST['on_sale'];
+	$page = isset( $_POST['page'] ) ? absint( $_POST['page'] ) : 1;
+	$attributes = isset( $_POST['attributes'] ) ? (array) $_POST['attributes'] : array();
+	
+	// Build query args
+	$args = array(
+		'post_type'      => 'product',
+		'post_status'    => 'publish',
+		'posts_per_page' => wc_get_default_products_per_row() * wc_get_default_product_rows_per_page(),
+		'paged'          => $page,
+		'meta_query'     => array(),
+		'tax_query'      => array( 'relation' => 'AND' ),
+	);
+	
+	// Search
+	if ( ! empty( $search ) ) {
+		$args['s'] = $search;
+	}
+	
+	// Categories
+	if ( ! empty( $categories ) ) {
+		$args['tax_query'][] = array(
+			'taxonomy' => 'product_cat',
+			'field'    => 'term_id',
+			'terms'    => $categories,
+			'operator' => 'IN',
+		);
+	}
+	
+	// Price range
+	if ( '' !== $min_price || '' !== $max_price ) {
+		$price_query = array(
+			'key'     => '_price',
+			'value'   => array( $min_price ? $min_price : 0, $max_price ? $max_price : 999999 ),
+			'compare' => 'BETWEEN',
+			'type'    => 'DECIMAL',
+		);
+		$args['meta_query'][] = $price_query;
+	}
+	
+	// Stock status
+	if ( ! empty( $stock_status ) ) {
+		$args['meta_query'][] = array(
+			'key'     => '_stock_status',
+			'value'   => $stock_status,
+			'compare' => '=',
+		);
+	}
+	
+	// On sale
+	if ( $on_sale ) {
+		// Get product IDs that are on sale
+		$on_sale_ids = wc_get_product_ids_on_sale();
+		if ( ! empty( $on_sale_ids ) ) {
+			if ( ! isset( $args['post__in'] ) ) {
+				$args['post__in'] = $on_sale_ids;
+			} else {
+				$args['post__in'] = array_intersect( $args['post__in'], $on_sale_ids );
+			}
+		} else {
+			// No products on sale, return empty result
+			$args['post__in'] = array( 0 );
+		}
+	}
+	
+	
+	// Product attributes
+	foreach ( $attributes as $taxonomy => $terms ) {
+		if ( ! empty( $terms ) && is_array( $terms ) ) {
+			$args['tax_query'][] = array(
+				'taxonomy' => sanitize_text_field( $taxonomy ),
+				'field'    => 'slug',
+				'terms'    => array_map( 'sanitize_text_field', $terms ),
+				'operator' => 'IN',
+			);
+		}
+	}
+	
+	// Execute query
+	$query = new WP_Query( $args );
+	
+	// Set up WooCommerce loop
+	wc_set_loop_prop( 'name', 'shop' );
+	wc_set_loop_prop( 'columns', 4 );
+	wc_set_loop_prop( 'total', $query->found_posts );
+	wc_set_loop_prop( 'total_pages', $query->max_num_pages );
+	wc_set_loop_prop( 'per_page', $args['posts_per_page'] );
+	wc_set_loop_prop( 'current_page', $page );
+	
+	// Get products HTML
+	ob_start();
+	
+	if ( $query->have_posts() ) {
+		woocommerce_product_loop_start();
+		
+		while ( $query->have_posts() ) {
+			$query->the_post();
+			wc_get_template_part( 'content', 'product' );
+		}
+		
+		woocommerce_product_loop_end();
+	} else {
+		wc_get_template( 'loop/no-products-found.php' );
+	}
+	
+	$products_html = ob_get_clean();
+	
+	// Get pagination HTML
+	ob_start();
+	woocommerce_pagination();
+	$pagination_html = ob_get_clean();
+	
+	// Get total products count (all products, not filtered) for "X of Y Products" display
+	$all_products_query = new WP_Query( array(
+		'post_type'      => 'product',
+		'post_status'    => 'publish',
+		'posts_per_page' => -1,
+		'fields'         => 'ids',
+	) );
+	$all_products_count = $all_products_query->found_posts;
+	wp_reset_postdata();
+	
+	// Determine if filters are active
+	$has_filters = false;
+	if ( ! empty( $search ) || ! empty( $categories ) || 
+		( '' !== $min_price || '' !== $max_price ) || 
+		! empty( $stock_status ) || $on_sale || 
+		! empty( $attributes ) ) {
+		$has_filters = true;
+	}
+	
+	// Get result count HTML
+	ob_start();
+	$result_count_args = array(
+		'total'         => $query->found_posts, // Filtered count
+		'per_page'     => $args['posts_per_page'],
+		'current'       => $page,
+		'all_products'  => $all_products_count, // Total count
+		'has_filters'   => $has_filters,
+	);
+	wc_get_template( 'loop/result-count.php', $result_count_args );
+	$result_count_html = ob_get_clean();
+	
+	wp_reset_postdata();
+	
+	// Get active filters data for display
+	$active_filters = basic_shop_theme_get_active_filters_data( $search, $categories, $min_price, $max_price, $stock_status, $on_sale, $attributes );
+	
+	wp_send_json_success( array(
+		'products'        => $products_html,
+		'pagination'      => $pagination_html,
+		'result_count'    => $result_count_html,
+		'found'           => $query->found_posts,
+		'all_products'    => $all_products_count,
+		'max_pages'       => $query->max_num_pages,
+		'active_filters'  => $active_filters,
+	) );
+}
+add_action( 'wp_ajax_basic_shop_filter_products', 'basic_shop_theme_filter_products' );
+add_action( 'wp_ajax_nopriv_basic_shop_filter_products', 'basic_shop_theme_filter_products' );
+
+/**
+ * Hide shop page title
+ */
+function basic_shop_theme_hide_shop_page_title( $show ) {
+	if ( is_shop() ) {
+		return false;
+	}
+	return $show;
+}
+add_filter( 'woocommerce_show_page_title', 'basic_shop_theme_hide_shop_page_title' );
+
+/**
+ * Set default product columns to 4 for shop page
+ */
+function basic_shop_theme_set_product_columns( $columns ) {
+	if ( is_shop() || is_product_category() || is_product_tag() || is_product_taxonomy() ) {
+		return 4;
+	}
+	return $columns;
+}
+add_filter( 'loop_shop_columns', 'basic_shop_theme_set_product_columns' );
+
+/**
+ * Modify result count arguments to include total product count
+ */
+function basic_shop_theme_result_count_args( $args ) {
+	if ( is_shop() || is_product_category() || is_product_tag() || is_product_taxonomy() ) {
+		// Get total products count (all products, not filtered)
+		$all_products_query = new WP_Query( array(
+			'post_type'      => 'product',
+			'post_status'    => 'publish',
+			'posts_per_page' => -1,
+			'fields'         => 'ids',
+		) );
+		$args['all_products'] = $all_products_query->found_posts;
+		wp_reset_postdata();
+	}
+	return $args;
+}
+add_filter( 'woocommerce_result_count_args', 'basic_shop_theme_result_count_args' );
+
+/**
+ * Get active filters data for display
+ */
+function basic_shop_theme_get_active_filters_data( $search, $categories, $min_price, $max_price, $stock_status, $on_sale, $attributes ) {
+	$active_filters = array();
+	
+	// Search
+	if ( ! empty( $search ) ) {
+		$active_filters[] = array(
+			'type' => 'search',
+			'label' => sprintf( __( 'Search: %s', 'basic-shop-theme' ), $search ),
+			'value' => $search,
+		);
+	}
+	
+	// Categories
+	if ( ! empty( $categories ) ) {
+		foreach ( $categories as $cat_id ) {
+			$term = get_term( $cat_id, 'product_cat' );
+			if ( $term && ! is_wp_error( $term ) ) {
+				$active_filters[] = array(
+					'type' => 'category',
+					'label' => $term->name,
+					'value' => $cat_id,
+				);
+			}
+		}
+	}
+	
+	// Price range - only add if user has changed from default
+	$price_range = basic_shop_theme_get_price_range();
+	$default_min = $price_range['min'];
+	$default_max = $price_range['max'];
+	
+	// Convert to float for comparison, but only if values are actually set and > 0
+	$min_price_val = null;
+	$max_price_val = null;
+	
+	if ( '' !== $min_price && $min_price !== null && $min_price !== '0' ) {
+		$min_price_val = floatval( $min_price );
+		// If it's 0 or less, treat as not set
+		if ( $min_price_val <= 0 ) {
+			$min_price_val = null;
+		}
+	}
+	
+	if ( '' !== $max_price && $max_price !== null && $max_price !== '0' ) {
+		$max_price_val = floatval( $max_price );
+		// If it's 0 or less, treat as not set
+		if ( $max_price_val <= 0 ) {
+			$max_price_val = null;
+		}
+	}
+	
+	// Check if user has actually changed the price range from defaults
+	$min_changed = false;
+	$max_changed = false;
+	
+	// Min price is changed if it's set AND greater than default min
+	if ( null !== $min_price_val && $min_price_val > $default_min ) {
+		$min_changed = true;
+	}
+	
+	// Max price is changed if it's set AND less than default max (and greater than 0)
+	if ( null !== $max_price_val && $max_price_val > 0 && $max_price_val < $default_max ) {
+		$max_changed = true;
+	}
+	
+	if ( $min_changed || $max_changed ) {
+		$price_label = '';
+		$currency_symbol = html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' );
+		$decimals = wc_get_price_decimals();
+		$decimal_separator = wc_get_price_decimal_separator();
+		$thousand_separator = wc_get_price_thousand_separator();
+		
+		if ( $min_changed && $max_changed ) {
+			$min_formatted = number_format( $min_price_val, $decimals, $decimal_separator, $thousand_separator );
+			$max_formatted = number_format( $max_price_val, $decimals, $decimal_separator, $thousand_separator );
+			$price_label = $currency_symbol . $min_formatted . ' - ' . $currency_symbol . $max_formatted;
+		} elseif ( $min_changed ) {
+			$min_formatted = number_format( $min_price_val, $decimals, $decimal_separator, $thousand_separator );
+			$price_label = sprintf( __( 'From %s', 'basic-shop-theme' ), $currency_symbol . $min_formatted );
+		} elseif ( $max_changed ) {
+			$max_formatted = number_format( $max_price_val, $decimals, $decimal_separator, $thousand_separator );
+			$price_label = sprintf( __( 'Up to %s', 'basic-shop-theme' ), $currency_symbol . $max_formatted );
+		}
+		
+		if ( ! empty( $price_label ) ) {
+			$active_filters[] = array(
+				'type' => 'price',
+				'label' => $price_label,
+				'min_price' => $min_price,
+				'max_price' => $max_price,
+			);
+		}
+	}
+	
+	// Stock status
+	if ( ! empty( $stock_status ) ) {
+		$stock_labels = array(
+			'instock' => __( 'In Stock', 'basic-shop-theme' ),
+			'outofstock' => __( 'Out of Stock', 'basic-shop-theme' ),
+		);
+		$active_filters[] = array(
+			'type' => 'stock',
+			'label' => isset( $stock_labels[ $stock_status ] ) ? $stock_labels[ $stock_status ] : $stock_status,
+			'value' => $stock_status,
+		);
+	}
+	
+	// On sale
+	if ( $on_sale ) {
+		$active_filters[] = array(
+			'type' => 'sale',
+			'label' => __( 'On Sale', 'basic-shop-theme' ),
+			'value' => '1',
+		);
+	}
+	
+	
+	// Attributes
+	foreach ( $attributes as $taxonomy => $terms ) {
+		if ( ! empty( $terms ) && is_array( $terms ) ) {
+			$attribute_obj = wc_get_attribute( wc_attribute_taxonomy_id_by_name( str_replace( 'pa_', '', $taxonomy ) ) );
+			$attr_label = $attribute_obj ? $attribute_obj->name : str_replace( 'pa_', '', $taxonomy );
+			
+			foreach ( $terms as $term_slug ) {
+				$term = get_term_by( 'slug', $term_slug, $taxonomy );
+				if ( $term && ! is_wp_error( $term ) ) {
+					$active_filters[] = array(
+						'type' => 'attribute',
+						'label' => $attr_label . ': ' . $term->name,
+						'value' => $term_slug,
+						'taxonomy' => $taxonomy,
+						'attr_name' => str_replace( 'pa_', '', $taxonomy ),
+					);
+				}
+			}
+		}
+	}
+	
+	return $active_filters;
+}
+
+/**
+ * Get active filters for initial page load
+ */
+function basic_shop_theme_get_initial_active_filters() {
+	$search = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
+	$categories = isset( $_GET['filter_category'] ) ? array_map( 'absint', explode( ',', $_GET['filter_category'] ) ) : array();
+	$min_price = isset( $_GET['filter_min_price'] ) ? floatval( $_GET['filter_min_price'] ) : '';
+	$max_price = isset( $_GET['filter_max_price'] ) ? floatval( $_GET['filter_max_price'] ) : '';
+	$stock_status = isset( $_GET['filter_stock'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_stock'] ) ) : '';
+	$on_sale = isset( $_GET['filter_sale'] ) && '1' === $_GET['filter_sale'];
+	
+	// Get attributes
+	$attributes = array();
+	$attribute_taxonomies = wc_get_attribute_taxonomies();
+	foreach ( $attribute_taxonomies as $attribute ) {
+		$filter_key = 'filter_' . $attribute->attribute_name;
+		if ( isset( $_GET[ $filter_key ] ) ) {
+			$value = $_GET[ $filter_key ];
+			$taxonomy = wc_attribute_taxonomy_name( $attribute->attribute_name );
+			if ( is_array( $value ) ) {
+				$attributes[ $taxonomy ] = array_map( 'sanitize_text_field', $value );
+			} else {
+				$attributes[ $taxonomy ] = array_map( 'sanitize_text_field', explode( ',', $value ) );
+			}
+		}
+	}
+	
+	return basic_shop_theme_get_active_filters_data( $search, $categories, $min_price, $max_price, $stock_status, $on_sale, $attributes );
+}
 
