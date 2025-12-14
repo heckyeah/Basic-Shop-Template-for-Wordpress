@@ -62,7 +62,9 @@
 				var $input = $slider.hasClass('shop-filter-price-slider-min') 
 					? $('input[name="filter_min_price"]')
 					: $('input[name="filter_max_price"]');
-				$input.val($slider.val());
+				// Round to whole dollar (no cents)
+				var roundedValue = Math.round(parseFloat($slider.val()) || 0);
+				$input.val(roundedValue);
 			});
 
 			// Price input sync with slider
@@ -71,7 +73,10 @@
 				var $slider = $input.attr('name') === 'filter_min_price'
 					? $('.shop-filter-price-slider-min')
 					: $('.shop-filter-price-slider-max');
-				$slider.val($input.val());
+				// Round to whole dollar (no cents)
+				var roundedValue = Math.round(parseFloat($input.val()) || 0);
+				$input.val(roundedValue);
+				$slider.val(roundedValue);
 			});
 
 			// Handle filter tag removal (event delegation for dynamically added tags)
@@ -112,13 +117,19 @@
 			this.showLoading();
 
 			// Collect filter data
+			var minPrice = $('input[name="filter_min_price"]').val();
+			var maxPrice = $('input[name="filter_max_price"]').val();
+			// Round price values to whole dollars (no cents)
+			minPrice = minPrice ? Math.round(parseFloat(minPrice)) : '';
+			maxPrice = maxPrice ? Math.round(parseFloat(maxPrice)) : '';
+			
 			var filterData = {
 				action: 'basic_shop_filter_products',
 				nonce: basicShopFilters.nonce,
 				search: searchTerm,
 				categories: this.getSelectedCategories(),
-				min_price: $('input[name="filter_min_price"]').val() || '',
-				max_price: $('input[name="filter_max_price"]').val() || '',
+				min_price: minPrice,
+				max_price: maxPrice,
 				stock_status: $('input[name="filter_stock"]:checked').val() || '',
 				on_sale: $('input[name="filter_sale"]:checked').length > 0 ? '1' : '',
 				page: page,

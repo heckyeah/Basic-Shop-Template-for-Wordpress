@@ -60,6 +60,11 @@ function basic_shop_theme_scripts() {
 	wp_enqueue_script( 'basic-shop-theme-last-viewed', get_template_directory_uri() . '/assets/js/last-viewed.js', array( 'jquery' ), '1.0.0', true );
 	wp_enqueue_script( 'basic-shop-theme-toast', get_template_directory_uri() . '/assets/js/toast.js', array( 'jquery' ), '1.0.0', true );
 	
+	// Product size selector (only on single product pages)
+	if ( is_product() ) {
+		wp_enqueue_script( 'basic-shop-theme-size-selector', get_template_directory_uri() . '/assets/js/product-size-selector.js', array( 'jquery' ), '1.0.0', true );
+	}
+	
 	// Shop filters script (only on shop/archive pages)
 	if ( is_shop() || is_product_category() || is_product_tag() || is_product_taxonomy() ) {
 		wp_enqueue_script( 'basic-shop-theme-filters', get_template_directory_uri() . '/assets/js/shop-filters.js', array( 'jquery' ), '1.0.0', true );
@@ -757,6 +762,198 @@ function basic_shop_theme_product_title_wrapper_close() {
 add_action( 'woocommerce_single_product_summary', 'basic_shop_theme_product_title_wrapper_close', 6 );
 
 /**
+ * Get color hex code from color name
+ * 
+ * @param string $color_name Color name
+ * @param string $taxonomy_name Taxonomy name for term meta lookup
+ * @return string Hex color code or color name
+ */
+function basic_shop_theme_get_color_hex( $color_name, $taxonomy_name = '' ) {
+	// Common color name to hex mapping
+	$color_map = array(
+		'red' => '#FF0000',
+		'blue' => '#0000FF',
+		'green' => '#008000',
+		'yellow' => '#FFFF00',
+		'orange' => '#FFA500',
+		'purple' => '#800080',
+		'pink' => '#FFC0CB',
+		'black' => '#000000',
+		'white' => '#FFFFFF',
+		'gray' => '#808080',
+		'grey' => '#808080',
+		'brown' => '#A52A2A',
+		'navy' => '#000080',
+		'teal' => '#008080',
+		'cyan' => '#00FFFF',
+		'magenta' => '#FF00FF',
+		'lime' => '#00FF00',
+		'olive' => '#808000',
+		'maroon' => '#800000',
+		'silver' => '#C0C0C0',
+		'gold' => '#FFD700',
+		'beige' => '#F5F5DC',
+		'tan' => '#D2B48C',
+		'khaki' => '#F0E68C',
+		'coral' => '#FF7F50',
+		'salmon' => '#FA8072',
+		'turquoise' => '#40E0D0',
+		'violet' => '#EE82EE',
+		'indigo' => '#4B0082',
+	);
+	
+	$color_lower = strtolower( trim( $color_name ) );
+	
+	// Check if it's already a hex code
+	if ( preg_match( '/^#[0-9A-Fa-f]{6}$/', $color_name ) ) {
+		return $color_name;
+	}
+	
+	// Check color map
+	if ( isset( $color_map[ $color_lower ] ) ) {
+		return $color_map[ $color_lower ];
+	}
+	
+	// Try to get from term meta if it's a taxonomy (some plugins store hex in term meta)
+	if ( ! empty( $taxonomy_name ) ) {
+		$term = get_term_by( 'name', $color_name, $taxonomy_name );
+		if ( $term && ! is_wp_error( $term ) ) {
+			$hex = get_term_meta( $term->term_id, 'product_attribute_color', true );
+			if ( ! empty( $hex ) ) {
+				return $hex;
+			}
+		}
+	}
+	
+	// Try CSS color name (browser will handle it)
+	// Return the color name as-is, CSS will try to interpret it
+	return $color_lower;
+}
+
+/**
+ * Add stock quantity to variation data
+ */
+function basic_shop_theme_add_stock_quantity_to_variation( $variation_data, $product, $variation ) {
+	if ( $variation && is_a( $variation, 'WC_Product_Variation' ) ) {
+		$is_in_stock = $variation->is_in_stock();
+		
+		// Get stock quantity - this handles parent inheritance automatically
+		// Use 'view' context to get the actual stock quantity (handles parent inheritance)
+		$stock_quantity_raw = $variation->get_stock_quantity( 'view' );
+		
+		// Normalize stock quantity using WooCommerce helper
+		$stock_quantity = wc_stock_amount( $stock_quantity_raw );
+		
+		// Store raw values for JavaScript
+		$variation_data['stock_quantity'] = $stock_quantity !== null && $stock_quantity !== '' ? $stock_quantity : '';
+		$variation_data['stock_status'] = $variation->get_stock_status();
+		$variation_data['manage_stock'] = $variation->get_manage_stock();
+		
+		// Generate stock count HTML - only show if we have a numeric quantity
+		$stock_count_html = '';
+		
+		if ( $is_in_stock ) {
+			// Check if we have a valid numeric stock quantity
+			// wc_stock_amount returns a number or empty string
+			if ( $stock_quantity !== null && $stock_quantity !== false && $stock_quantity !== '' && is_numeric( $stock_quantity ) ) {
+				// We have a valid stock quantity number - show it
+				$stock_qty_num = absint( $stock_quantity );
+				if ( $stock_qty_num > 0 ) {
+					$stock_count_html = '<div class="variation-stock-count">' . sprintf( esc_html__( '%d in stock', 'woocommerce' ), $stock_qty_num ) . '</div>';
+				}
+			}
+			// If no numeric quantity, don't show stock count (user only wants counts, not "In stock" message)
+		}
+		
+		$variation_data['stock_count_html'] = $stock_count_html;
+	}
+	return $variation_data;
+}
+add_filter( 'woocommerce_available_variation', 'basic_shop_theme_add_stock_quantity_to_variation', 10, 3 );
+
+/**
+ * Display product attributes on single product page
+ */
+function basic_shop_theme_display_product_attributes() {
+	global $product;
+	
+	if ( ! is_product() ) {
+		return;
+	}
+	
+	$attributes = $product->get_attributes();
+	
+	if ( empty( $attributes ) ) {
+		return;
+	}
+	
+	// Get product attributes for display
+	$product_attributes = array();
+	
+	foreach ( $attributes as $attribute ) {
+		$values = array();
+		$raw_values = array(); // Store raw values for size selector
+		
+		if ( $attribute->is_taxonomy() ) {
+			$attribute_taxonomy = $attribute->get_taxonomy_object();
+			$attribute_values   = wc_get_product_terms( $product->get_id(), $attribute->get_name(), array( 'fields' => 'all' ) );
+			
+			foreach ( $attribute_values as $attribute_value ) {
+				$value_name = esc_html( $attribute_value->name );
+				$raw_values[] = $value_name; // Store raw value
+				
+				if ( $attribute_taxonomy->attribute_public ) {
+					$values[] = '<a href="' . esc_url( get_term_link( $attribute_value->term_id, $attribute->get_name() ) ) . '" rel="tag">' . $value_name . '</a>';
+				} else {
+					$values[] = $value_name;
+				}
+			}
+		} else {
+			$raw_values = $attribute->get_options();
+			$values = $raw_values;
+			
+			foreach ( $values as &$value ) {
+				$value = make_clickable( esc_html( $value ) );
+			}
+		}
+		
+		$attribute_key = 'attribute_' . sanitize_title_with_dashes( $attribute->get_name() );
+		$attribute_name = sanitize_title_with_dashes( $attribute->get_name() );
+		
+		$product_attributes[ $attribute_key ] = array(
+			'label' => wc_attribute_label( $attribute->get_name() ),
+			'value' => apply_filters( 'woocommerce_attribute', wpautop( wptexturize( implode( ', ', $values ) ) ), $attribute, $values ),
+			'raw_values' => $raw_values, // Add raw values for size/color selector
+			'attribute_name' => $attribute_name, // Add attribute name for checking if it's size/color
+			'is_taxonomy' => $attribute->is_taxonomy(), // Store if it's a taxonomy for color hex lookup
+			'taxonomy_name' => $attribute->is_taxonomy() ? $attribute->get_name() : '', // Store taxonomy name for color hex lookup
+		);
+	}
+	
+	/**
+	 * Hook: woocommerce_display_product_attributes.
+	 *
+	 * @since 3.6.0.
+	 * @param array $product_attributes Array of attributes to display; label, value.
+	 * @param WC_Product $product Showing attributes for this product.
+	 */
+	$product_attributes = apply_filters( 'woocommerce_display_product_attributes', $product_attributes, $product );
+	
+	if ( ! empty( $product_attributes ) ) {
+		wc_get_template(
+			'single-product/product-attributes.php',
+			array(
+				'product_attributes' => $product_attributes,
+				'product'            => $product,
+				'attributes'         => $attributes,
+			)
+		);
+	}
+}
+// Disabled - attributes removed from single product page
+// add_action( 'woocommerce_single_product_summary', 'basic_shop_theme_display_product_attributes', 25 );
+
+/**
  * Get price range for all products
  */
 function basic_shop_theme_get_price_range() {
@@ -792,20 +989,21 @@ function basic_shop_theme_filter_products() {
 	$search = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
 	$categories = isset( $_POST['categories'] ) ? array_map( 'absint', (array) $_POST['categories'] ) : array();
 	// Get price values - only set if they're actually provided, not empty, and greater than 0
+	// Round to whole dollars (no cents)
 	$min_price = '';
 	$max_price = '';
 	if ( isset( $_POST['min_price'] ) && $_POST['min_price'] !== '' && $_POST['min_price'] !== null && $_POST['min_price'] !== '0' ) {
 		$min_price_float = floatval( $_POST['min_price'] );
-		// Only keep if it's greater than 0
+		// Only keep if it's greater than 0, and round to whole dollar
 		if ( $min_price_float > 0 ) {
-			$min_price = $min_price_float;
+			$min_price = round( $min_price_float );
 		}
 	}
 	if ( isset( $_POST['max_price'] ) && $_POST['max_price'] !== '' && $_POST['max_price'] !== null && $_POST['max_price'] !== '0' ) {
 		$max_price_float = floatval( $_POST['max_price'] );
-		// Only keep if it's greater than 0
+		// Only keep if it's greater than 0, and round to whole dollar
 		if ( $max_price_float > 0 ) {
-			$max_price = $max_price_float;
+			$max_price = round( $max_price_float );
 		}
 	}
 	$stock_status = isset( $_POST['stock_status'] ) ? sanitize_text_field( wp_unslash( $_POST['stock_status'] ) ) : '';
@@ -1082,9 +1280,14 @@ function basic_shop_theme_get_active_filters_data( $search, $categories, $min_pr
 	if ( $min_changed || $max_changed ) {
 		$price_label = '';
 		$currency_symbol = html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' );
-		$decimals = wc_get_price_decimals();
+		// Use 0 decimals for whole dollars only (no cents)
+		$decimals = 0;
 		$decimal_separator = wc_get_price_decimal_separator();
 		$thousand_separator = wc_get_price_thousand_separator();
+		
+		// Round prices to whole dollars
+		$min_price_val = round( $min_price_val );
+		$max_price_val = round( $max_price_val );
 		
 		if ( $min_changed && $max_changed ) {
 			$min_formatted = number_format( $min_price_val, $decimals, $decimal_separator, $thousand_separator );
@@ -1161,8 +1364,9 @@ function basic_shop_theme_get_active_filters_data( $search, $categories, $min_pr
 function basic_shop_theme_get_initial_active_filters() {
 	$search = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
 	$categories = isset( $_GET['filter_category'] ) ? array_map( 'absint', explode( ',', $_GET['filter_category'] ) ) : array();
-	$min_price = isset( $_GET['filter_min_price'] ) ? floatval( $_GET['filter_min_price'] ) : '';
-	$max_price = isset( $_GET['filter_max_price'] ) ? floatval( $_GET['filter_max_price'] ) : '';
+	// Round prices to whole dollars (no cents)
+	$min_price = isset( $_GET['filter_min_price'] ) ? round( floatval( $_GET['filter_min_price'] ) ) : '';
+	$max_price = isset( $_GET['filter_max_price'] ) ? round( floatval( $_GET['filter_max_price'] ) ) : '';
 	$stock_status = isset( $_GET['filter_stock'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_stock'] ) ) : '';
 	$on_sale = isset( $_GET['filter_sale'] ) && '1' === $_GET['filter_sale'];
 	

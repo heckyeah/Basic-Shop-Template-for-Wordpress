@@ -11,8 +11,9 @@ defined( 'ABSPATH' ) || exit;
 // Get current filter values from URL
 $current_search = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
 $current_categories = isset( $_GET['filter_category'] ) ? array_map( 'absint', (array) $_GET['filter_category'] ) : array();
-$current_min_price = isset( $_GET['filter_min_price'] ) ? floatval( $_GET['filter_min_price'] ) : '';
-$current_max_price = isset( $_GET['filter_max_price'] ) ? floatval( $_GET['filter_max_price'] ) : '';
+// Round prices to whole dollars (no cents)
+$current_min_price = isset( $_GET['filter_min_price'] ) ? round( floatval( $_GET['filter_min_price'] ) ) : '';
+$current_max_price = isset( $_GET['filter_max_price'] ) ? round( floatval( $_GET['filter_max_price'] ) ) : '';
 $current_stock = isset( $_GET['filter_stock'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_stock'] ) ) : '';
 $current_sale = isset( $_GET['filter_sale'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_sale'] ) ) : '';
 
@@ -105,8 +106,8 @@ $price_range = basic_shop_theme_get_price_range();
 							placeholder="<?php echo esc_attr( strip_tags( wc_price( $price_range['min'] ) ) ); ?>"
 							min="<?php echo esc_attr( $price_range['min'] ); ?>"
 							max="<?php echo esc_attr( $price_range['max'] ); ?>"
-							step="0.01"
-							value="<?php echo esc_attr( $current_min_price ); ?>"
+							step="1"
+							value="<?php echo esc_attr( $current_min_price ? round( $current_min_price ) : '' ); ?>"
 						/>
 					</label>
 					<span class="shop-filter-price-separator">-</span>
@@ -119,8 +120,8 @@ $price_range = basic_shop_theme_get_price_range();
 							placeholder="<?php echo esc_attr( strip_tags( wc_price( $price_range['max'] ) ) ); ?>"
 							min="<?php echo esc_attr( $price_range['min'] ); ?>"
 							max="<?php echo esc_attr( $price_range['max'] ); ?>"
-							step="0.01"
-							value="<?php echo esc_attr( $current_max_price ); ?>"
+							step="1"
+							value="<?php echo esc_attr( $current_max_price ? round( $current_max_price ) : '' ); ?>"
 						/>
 					</label>
 				</div>
@@ -130,16 +131,16 @@ $price_range = basic_shop_theme_get_price_range();
 						class="shop-filter-price-slider shop-filter-price-slider-min" 
 						min="<?php echo esc_attr( $price_range['min'] ); ?>"
 						max="<?php echo esc_attr( $price_range['max'] ); ?>"
-						step="0.01"
-						value="<?php echo esc_attr( $current_min_price ? $current_min_price : $price_range['min'] ); ?>"
+						step="1"
+						value="<?php echo esc_attr( $current_min_price ? round( $current_min_price ) : $price_range['min'] ); ?>"
 					/>
 					<input 
 						type="range" 
 						class="shop-filter-price-slider shop-filter-price-slider-max" 
 						min="<?php echo esc_attr( $price_range['min'] ); ?>"
 						max="<?php echo esc_attr( $price_range['max'] ); ?>"
-						step="0.01"
-						value="<?php echo esc_attr( $current_max_price ? $current_max_price : $price_range['max'] ); ?>"
+						step="1"
+						value="<?php echo esc_attr( $current_max_price ? round( $current_max_price ) : $price_range['max'] ); ?>"
 					/>
 				</div>
 			</div>
