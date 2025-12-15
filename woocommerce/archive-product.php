@@ -61,13 +61,15 @@ do_action( 'woocommerce_before_main_content' );
 			<div class="shop-products-content">
 				<?php if ( woocommerce_product_loop() ) : ?>
 					<div class="shop-products-toolbar">
-						<!-- Filter Toggle Button -->
-						<button class="shop-filters-toggle" id="shop-filters-toggle" aria-label="<?php esc_attr_e( 'Toggle filters', 'basic-shop-theme' ); ?>">
-							<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-							</svg>
-							<span><?php esc_html_e( 'Filters', 'basic-shop-theme' ); ?></span>
-						</button>
+					<!-- Filter Toggle Button -->
+					<button class="shop-filters-toggle" id="shop-filters-toggle" aria-label="<?php esc_attr_e( 'Toggle filters', 'basic-shop-theme' ); ?>">
+						<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+							<!-- Funnel/Filter icon -->
+							<path d="M2 4h16l-2 4-2 4-2 4h-4l-2-4-2-4-2-4z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+							<path d="M4 8h12M6 12h8M8 16h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+						</svg>
+						<span><?php esc_html_e( 'Filters', 'basic-shop-theme' ); ?></span>
+					</button>
 						<?php
 						/**
 						 * Hook: woocommerce_before_shop_loop.

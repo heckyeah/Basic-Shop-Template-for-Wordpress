@@ -74,6 +74,11 @@ function basic_shop_theme_scripts() {
 			'shopUrl' => wc_get_page_permalink( 'shop' ),
 		) );
 	}
+	
+	// Product thumbnail slider (on shop/archive pages and single product pages for related products)
+	if ( is_shop() || is_product_category() || is_product_tag() || is_product_taxonomy() || is_product() ) {
+		wp_enqueue_script( 'basic-shop-theme-thumbnail-slider', get_template_directory_uri() . '/assets/js/product-thumbnail-slider.js', array( 'jquery' ), '1.0.0', true );
+	}
 
 	// Localize scripts
 	wp_localize_script( 'basic-shop-theme-minicart', 'basicShopAjax', array(
@@ -121,12 +126,26 @@ function basic_shop_theme_woocommerce_setup() {
 	// Remove default result count and ordering from before_shop_loop hook (we'll output them manually in a container)
 	remove_action( 'woocommerce_before_shop_loop', 'woocommerce_result_count', 20 );
 	remove_action( 'woocommerce_before_shop_loop', 'woocommerce_catalog_ordering', 30 );
+	
+	// Remove star ratings from product listings
+	remove_action( 'woocommerce_after_shop_loop_item_title', 'woocommerce_template_loop_rating', 5 );
+	
+	// Replace default product thumbnail with slider
+	remove_action( 'woocommerce_before_shop_loop_item_title', 'woocommerce_template_loop_product_thumbnail', 10 );
+	add_action( 'woocommerce_before_shop_loop_item_title', 'basic_shop_theme_template_loop_product_thumbnail_slider', 10 );
 
 	// Add custom wrappers
 	add_action( 'woocommerce_before_main_content', 'basic_shop_theme_wrapper_start', 10 );
 	add_action( 'woocommerce_after_main_content', 'basic_shop_theme_wrapper_end', 10 );
 }
 add_action( 'init', 'basic_shop_theme_woocommerce_setup' );
+
+/**
+ * Custom product thumbnail slider for shop loop
+ */
+function basic_shop_theme_template_loop_product_thumbnail_slider() {
+	wc_get_template( 'loop/product-thumbnail-slider.php' );
+}
 
 /**
  * Start wrapper
@@ -1021,9 +1040,70 @@ function basic_shop_theme_filter_products() {
 		'tax_query'      => array( 'relation' => 'AND' ),
 	);
 	
-	// Search
+	// Search - includes product tags
 	if ( ! empty( $search ) ) {
-		$args['s'] = $search;
+		// Find product tags that match the search term
+		$tag_terms = get_terms( array(
+			'taxonomy'   => 'product_tag',
+			'name__like' => $search,
+			'hide_empty' => false,
+		) );
+		
+		$tag_product_ids = array();
+		if ( ! is_wp_error( $tag_terms ) && ! empty( $tag_terms ) ) {
+			// Get product IDs that have matching tags
+			$tag_ids = wp_list_pluck( $tag_terms, 'term_id' );
+			$tag_query = new WP_Query( array(
+				'post_type'      => 'product',
+				'post_status'    => 'publish',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				'tax_query'      => array(
+					array(
+						'taxonomy' => 'product_tag',
+						'field'    => 'term_id',
+						'terms'    => $tag_ids,
+						'operator' => 'IN',
+					),
+				),
+			) );
+			$tag_product_ids = $tag_query->posts;
+			wp_reset_postdata();
+		}
+		
+		// If we have tag matches, we need to combine with standard search
+		if ( ! empty( $tag_product_ids ) ) {
+			// Run standard search first to get those product IDs
+			$standard_search_query = new WP_Query( array(
+				'post_type'      => 'product',
+				'post_status'    => 'publish',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				's'              => $search,
+			) );
+			$standard_product_ids = $standard_search_query->posts;
+			wp_reset_postdata();
+			
+			// Combine both sets of product IDs
+			$combined_product_ids = array_unique( array_merge( $standard_product_ids, $tag_product_ids ) );
+			
+			// Use post__in instead of 's' to search only in these products
+			// But we need to preserve other filters, so we'll use a different approach
+			// Store the combined IDs and use them with post__in
+			if ( ! empty( $combined_product_ids ) ) {
+				// If we already have post__in (from on_sale filter), intersect them
+				if ( isset( $args['post__in'] ) && ! empty( $args['post__in'] ) ) {
+					$args['post__in'] = array_intersect( $args['post__in'], $combined_product_ids );
+				} else {
+					$args['post__in'] = $combined_product_ids;
+				}
+				// Remove 's' since we're using post__in
+				unset( $args['s'] );
+			}
+		} else {
+			// No tag matches, use standard search
+			$args['s'] = $search;
+		}
 	}
 	
 	// Categories

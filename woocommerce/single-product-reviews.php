@@ -29,7 +29,42 @@ if ( ! comments_open() ) {
 			?>
 		</h2>
 
-		<?php if ( have_comments() ) : ?>
+		<?php
+		// Set up comment query for product reviews
+		$comment_args = array(
+			'post_id' => $product->get_id(),
+			'type'    => 'review',
+			'orderby' => 'comment_date',
+			'order'   => 'DESC',
+		);
+		
+		// Include approved reviews, and pending reviews for current user
+		if ( is_user_logged_in() ) {
+			$comment_args['status'] = 'all';
+			$comment_args['include_unapproved'] = array( get_current_user_id() );
+		} else {
+			$comment_args['status'] = 'approve';
+		}
+		
+		// Get comments and set up the query
+		$comments_query = new WP_Comment_Query( $comment_args );
+		$comments = $comments_query->get_comments();
+		
+		// Filter to only show approved or user's own pending reviews
+		if ( is_user_logged_in() ) {
+			$user_id = get_current_user_id();
+			$comments = array_filter( $comments, function( $comment ) use ( $user_id ) {
+				return $comment->comment_approved === '1' || ( $comment->comment_approved === '0' && (int) $comment->user_id === $user_id );
+			} );
+		}
+		
+		// Set up global comment query for have_comments() and wp_list_comments()
+		global $wp_query;
+		$wp_query->comments = $comments;
+		$wp_query->comment_count = count( $comments );
+		$wp_query->max_num_comment_pages = get_comment_pages_count( $comments, get_option( 'comments_per_page' ), true );
+		
+		if ( ! empty( $comments ) ) : ?>
 			<ol class="commentlist">
 				<?php wp_list_comments( apply_filters( 'woocommerce_product_review_list_args', array( 'callback' => 'woocommerce_comments' ) ) ); ?>
 			</ol>

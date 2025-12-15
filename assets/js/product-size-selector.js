@@ -236,6 +236,101 @@
 				}
 			});
 		});
+		
+		// Function to check and update add to cart button state
+		function updateAddToCartButtonState($form) {
+			var $button = $form.find('.single_add_to_cart_button');
+			var $variationId = $form.find('input.variation_id');
+			
+			// Check if variation_id is set and valid
+			var variationId = $variationId.val();
+			var isValidVariation = variationId && variationId !== '0' && variationId !== '';
+			
+			// Enable/disable button based on variation selection
+			if (isValidVariation) {
+				$button.prop('disabled', false).removeClass('disabled');
+			} else {
+				$button.prop('disabled', true).addClass('disabled');
+			}
+		}
+		
+		// Monitor WooCommerce variation events
+		$(document).on('found_variation', '.variations_form', function(event, variation) {
+			// Variation found - enable add to cart button
+			var $form = $(this);
+			updateAddToCartButtonState($form);
+		});
+		
+		$(document).on('reset_data', '.variations_form', function() {
+			// Variation reset - disable add to cart button
+			var $form = $(this);
+			updateAddToCartButtonState($form);
+		});
+		
+		$(document).on('hide_variation', '.variations_form', function() {
+			// Variation hidden - disable add to cart button
+			var $form = $(this);
+			updateAddToCartButtonState($form);
+		});
+		
+		// Check on variation select change
+		$(document).on('woocommerce_variation_select_change', '.variations_form', function() {
+			var $form = $(this);
+			updateAddToCartButtonState($form);
+		});
+		
+		// Check when variation has changed
+		$(document).on('woocommerce_variation_has_changed', '.variations_form', function() {
+			var $form = $(this);
+			updateAddToCartButtonState($form);
+		});
+		
+		// Initialize button state on page load
+		$('.variations_form').each(function() {
+			var $form = $(this);
+			updateAddToCartButtonState($form);
+		});
+		
+		// Handle Clear button click - deselect all swatches and disable add to cart
+		$(document).on('click', '.reset_variations', function(e) {
+			var $form = $(this).closest('.variations_form');
+			
+			// Clear all color swatches
+			$form.find('.variation-color-button').removeClass('selected');
+			$form.find('.variation-color-selector').each(function() {
+				var $selector = $(this);
+				var $variationItem = $selector.closest('.variation-item');
+				var $label = $variationItem.find('.variation-color-label');
+				if ($label.length) {
+					var $span = $label.find('.selected-color-value');
+					$span.text('');
+				}
+			});
+			
+			// Clear all size buttons
+			$form.find('.variation-size-button').removeClass('selected');
+			$form.find('.variation-size-selector').each(function() {
+				var $selector = $(this);
+				var $variationItem = $selector.closest('.variation-item');
+				var $label = $variationItem.find('.variation-size-label');
+				if ($label.length) {
+					var $span = $label.find('.selected-size-value');
+					$span.text('');
+				}
+			});
+			
+			// Clear all dropdowns
+			$form.find('.variation-dropdown').val('');
+			
+			// Clear all hidden select fields
+			$form.find('.variations select.variation-select-hidden').val('').trigger('change');
+			
+			// Clear variation_id
+			$form.find('input.variation_id').val('').trigger('change');
+			
+			// Update button state using our function
+			updateAddToCartButtonState($form);
+		});
 	});
 
 })(jQuery);

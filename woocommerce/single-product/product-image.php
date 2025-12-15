@@ -14,13 +14,38 @@ global $product;
 $post_thumbnail_id = $product->get_image_id();
 $attachment_ids    = $product->get_gallery_image_ids();
 
-// Combine featured image with gallery images
+// Get variation images if product is variable
+$variation_image_ids = array();
+if ( $product->is_type( 'variable' ) ) {
+	$variations = $product->get_children();
+	foreach ( $variations as $variation_id ) {
+		$variation = wc_get_product( $variation_id );
+		if ( $variation && $variation instanceof WC_Product_Variation ) {
+			$variation_image_id = $variation->get_image_id();
+			if ( ! empty( $variation_image_id ) ) {
+				$variation_image_ids[] = $variation_image_id;
+			}
+		}
+	}
+	// Remove duplicates
+	$variation_image_ids = array_unique( $variation_image_ids );
+}
+
+// Combine featured image with gallery images and variation images
 $all_image_ids = array();
 if ( $post_thumbnail_id ) {
 	$all_image_ids[] = $post_thumbnail_id;
 }
 if ( $attachment_ids ) {
+	// Remove main image from gallery if it's duplicated
+	$attachment_ids = array_diff( $attachment_ids, array( $post_thumbnail_id ) );
 	$all_image_ids = array_merge( $all_image_ids, $attachment_ids );
+}
+// Add variation images (excluding duplicates)
+if ( ! empty( $variation_image_ids ) ) {
+	// Remove any images that are already in the array
+	$variation_image_ids = array_diff( $variation_image_ids, $all_image_ids );
+	$all_image_ids = array_merge( $all_image_ids, $variation_image_ids );
 }
 ?>
 

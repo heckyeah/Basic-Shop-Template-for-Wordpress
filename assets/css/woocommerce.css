@@ -176,6 +176,220 @@
 	height: auto !important;
 }
 
+/* Product Thumbnail Slider */
+.product-thumbnail-slider {
+	position: relative;
+	width: 100%;
+	overflow: hidden;
+}
+
+.product-thumbnail-slider-wrapper {
+	position: relative;
+	width: 100%;
+	height: 0;
+	padding-bottom: 100%; /* Maintain square aspect ratio */
+	overflow: hidden;
+	user-select: none;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	touch-action: pan-y;
+}
+
+.product-thumbnail-slide {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+.product-thumbnail-slide.active {
+	opacity: 1;
+	visibility: visible;
+}
+
+.product-thumbnail-slide img,
+.product-thumbnail-single {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+	border: 1px solid var(--color-gray-border);
+	border-radius: 0;
+}
+
+.product-thumbnail-arrow {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 40px;
+	height: 40px;
+	background: var(--color-white);
+	border: 1px solid var(--color-black);
+	cursor: pointer;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10;
+	opacity: 0;
+	transition: opacity 0.3s ease, background-color 0.3s ease;
+	appearance: none;
+	-webkit-appearance: none;
+}
+
+.product-thumbnail-arrow:hover {
+	background: var(--color-black);
+	color: var(--color-white);
+}
+
+.product-thumbnail-arrow:active {
+	background: var(--color-gray-dark);
+}
+
+.product-thumbnail-arrow svg {
+	width: 20px;
+	height: 20px;
+	color: var(--color-black);
+	transition: color 0.3s ease;
+}
+
+.product-thumbnail-arrow:hover svg {
+	color: var(--color-white);
+}
+
+.product-thumbnail-arrow-prev {
+	left: var(--spacing-xs);
+}
+
+.product-thumbnail-arrow-next {
+	right: var(--spacing-xs);
+}
+
+/* Show arrows on hover */
+.product-thumbnail-slider:hover .product-thumbnail-arrow {
+	opacity: 1;
+}
+
+/* Hide arrows on touchscreen devices */
+@media (hover: none) and (pointer: coarse) {
+	.product-thumbnail-arrow {
+		display: none;
+	}
+}
+
+/* Prevent native image dragging but allow our custom drag */
+.product-thumbnail-slide img {
+	-webkit-user-drag: none;
+	-khtml-user-drag: none;
+	-moz-user-drag: none;
+	-o-user-drag: none;
+	user-drag: none;
+	pointer-events: auto;
+}
+
+/* Ensure slider works within product link */
+.woocommerce ul.products li.product a.woocommerce-LoopProduct-link .product-thumbnail-slider,
+.shop-products a.woocommerce-LoopProduct-link .product-thumbnail-slider,
+.related.products a.woocommerce-LoopProduct-link .product-thumbnail-slider,
+.last-viewed-products a.woocommerce-LoopProduct-link .product-thumbnail-slider {
+	display: block;
+	width: 100%;
+}
+
+/* Prevent arrows from blocking product link clicks */
+.product-thumbnail-arrow {
+	pointer-events: auto;
+	z-index: 15;
+}
+
+/* Ensure product link doesn't interfere with slider interactions */
+.woocommerce ul.products li.product a.woocommerce-LoopProduct-link,
+.shop-products a.woocommerce-LoopProduct-link,
+.related.products a.woocommerce-LoopProduct-link,
+.last-viewed-products a.woocommerce-LoopProduct-link {
+	position: relative;
+}
+
+/* Ensure wrapper can receive drag events */
+.product-thumbnail-slider-wrapper {
+	position: relative;
+	z-index: 1;
+}
+
+/* Color Swatches */
+.product-thumbnail-color-swatches {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: var(--spacing-xs);
+	padding: var(--spacing-sm);
+	flex-wrap: wrap;
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	z-index: 12;
+	width: 100%;
+	pointer-events: none;
+}
+
+.product-thumbnail-color-swatch {
+	width: 25px;
+	height: 25px;
+	border-radius: 50%;
+	border: 2px solid var(--color-gray-border);
+	cursor: pointer;
+	transition: all 0.2s ease;
+	padding: 0;
+	position: relative;
+	overflow: visible;
+	display: inline-block;
+	background: var(--color-white);
+	appearance: none;
+	-webkit-appearance: none;
+	flex-shrink: 0;
+}
+
+.product-thumbnail-color-swatch:hover {
+	border-color: var(--color-black);
+	transform: scale(1.1);
+}
+
+.product-thumbnail-color-swatch.active {
+	border: 2px solid var(--color-black);
+	box-shadow: 0 0 0 2px var(--color-white), 0 0 0 4px var(--color-black);
+}
+
+.product-thumbnail-color-swatch .screen-reader-text {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border-width: 0;
+}
+
+/* Ensure color swatches are clickable */
+.product-thumbnail-color-swatch {
+	pointer-events: auto;
+}
+
+/* Product link should allow swatches to be clickable */
+.woocommerce ul.products li.product a.woocommerce-LoopProduct-link .product-thumbnail-color-swatches,
+.shop-products a.woocommerce-LoopProduct-link .product-thumbnail-color-swatches,
+.related.products a.woocommerce-LoopProduct-link .product-thumbnail-color-swatches,
+.last-viewed-products a.woocommerce-LoopProduct-link .product-thumbnail-color-swatches {
+	pointer-events: auto;
+}
+
 /* Reset WooCommerce price display */
 .woocommerce .price,
 .woocommerce-page .price {
@@ -724,8 +938,8 @@ body.lightbox-open {
 /* Star Ratings */
 .woocommerce .star-rating,
 .woocommerce-product-rating {
-	padding-left: var(--spacing-md);
-	padding-right: var(--spacing-sm);
+	padding-left: 0;
+	padding-right: 0;
 	padding-bottom: var(--spacing-xs);
 }
 
@@ -738,7 +952,7 @@ body.lightbox-open {
 	color: var(--color-gray-medium);
 	font-size: var(--font-size-small);
 	text-decoration: none;
-	margin-left: var(--spacing-xs);
+	margin-left: 0;
 }
 
 .woocommerce-product-rating .woocommerce-review-link:hover {
@@ -1046,6 +1260,13 @@ width: 100%;
 	font-size: var(--font-size-body);
 	text-transform: uppercase;
 	letter-spacing: 0.5px;
+}
+
+.woocommerce div.product form.cart .single_add_to_cart_button:disabled,
+.woocommerce div.product form.cart .single_add_to_cart_button.disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	pointer-events: none;
 }
 
 /* Product Features List */
@@ -2697,6 +2918,70 @@ width: 100%;
 .shop-filter-count {
 	color: var(--color-gray-medium);
 	font-size: 0.9em;
+}
+
+/* Color Filter Swatches */
+.shop-filter-color-swatches {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--spacing-xs);
+	align-items: center;
+}
+
+.shop-filter-color-swatch-label {
+	position: relative;
+	display: inline-block;
+	cursor: pointer;
+}
+
+.shop-filter-color-radio {
+	position: absolute;
+	opacity: 0;
+	width: 0;
+	height: 0;
+	margin: 0;
+	padding: 0;
+	pointer-events: none;
+}
+
+.shop-filter-color-swatch {
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	border: 2px solid var(--color-gray-border);
+	cursor: pointer;
+	transition: all 0.2s ease;
+	padding: 0;
+	position: relative;
+	overflow: visible;
+	display: inline-block;
+	background: var(--color-white);
+	appearance: none;
+	-webkit-appearance: none;
+	flex-shrink: 0;
+}
+
+.shop-filter-color-swatch:hover {
+	border-color: var(--color-black);
+	transform: scale(1.1);
+}
+
+.shop-filter-color-radio:checked + .shop-filter-color-swatch,
+.shop-filter-color-swatch.selected {
+	border: 2px solid var(--color-black);
+	box-shadow: 0 0 0 2px var(--color-white), 0 0 0 4px var(--color-black);
+}
+
+.shop-filter-color-swatch .screen-reader-text {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border-width: 0;
 }
 
 /* Price Range Filter */

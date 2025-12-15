@@ -49,11 +49,28 @@ foreach ( $product_attributes as $taxonomy => $data ) {
 	$filter_key = 'filter_' . $data['name'];
 	if ( isset( $_GET[ $filter_key ] ) ) {
 		$value = $_GET[ $filter_key ];
-		// Handle both array and comma-separated string
-		if ( is_array( $value ) ) {
-			$current_attributes[ $taxonomy ] = array_map( 'sanitize_text_field', $value );
+		// Check if this is the color attribute (single selection - radio)
+		$is_color_attr = false;
+		$attribute_name_lower = strtolower( $data['name'] );
+		$attribute_label_lower = strtolower( $data['label'] );
+		$is_color_attr = ( 
+			strpos( $attribute_name_lower, 'color' ) !== false || 
+			strpos( $attribute_name_lower, 'colour' ) !== false || 
+			strpos( $attribute_label_lower, 'color' ) !== false || 
+			strpos( $attribute_label_lower, 'colour' ) !== false
+		);
+		
+		if ( $is_color_attr ) {
+			// Color attribute: single value (radio button)
+			$current_attributes[ $taxonomy ] = array( sanitize_text_field( $value ) );
 		} else {
-			$current_attributes[ $taxonomy ] = array_map( 'sanitize_text_field', explode( ',', $value ) );
+			// Other attributes: multiple values (checkboxes)
+			// Handle both array and comma-separated string
+			if ( is_array( $value ) ) {
+				$current_attributes[ $taxonomy ] = array_map( 'sanitize_text_field', $value );
+			} else {
+				$current_attributes[ $taxonomy ] = array_map( 'sanitize_text_field', explode( ',', $value ) );
+			}
 		}
 	}
 }
@@ -146,11 +163,102 @@ $price_range = basic_shop_theme_get_price_range();
 			</div>
 		</div>
 
-		<!-- Product Attributes Filters -->
-		<?php foreach ( $product_attributes as $taxonomy => $data ) : ?>
-			<?php
+		<!-- Color Filter (if color attribute exists) -->
+		<?php
+		$color_attribute = null;
+		$color_taxonomy = null;
+		foreach ( $product_attributes as $taxonomy => $data ) {
+			$attribute_name_lower = strtolower( $data['name'] );
+			$attribute_label_lower = strtolower( $data['label'] );
+			$attribute_id = sanitize_title( $data['name'] );
+			$attribute_id_lower = strtolower( $attribute_id );
+			
+			// Check multiple ways: name, label, and ID (case-insensitive)
+			$is_color = ( 
+				strpos( $attribute_name_lower, 'color' ) !== false || 
+				strpos( $attribute_name_lower, 'colour' ) !== false || 
+				strpos( $attribute_label_lower, 'color' ) !== false || 
+				strpos( $attribute_label_lower, 'colour' ) !== false || 
+				strpos( $attribute_id_lower, 'color' ) !== false || 
+				strpos( $attribute_id_lower, 'colour' ) !== false
+			);
+			
+			if ( $is_color ) {
+				$color_attribute = $data;
+				$color_taxonomy = $taxonomy;
+				break;
+			}
+		}
+		
+		// Debug: Output available attributes (visible in page source - view source to see)
+		echo '<!-- DEBUG: Available attributes: ';
+		foreach ( $product_attributes as $tax => $data ) {
+			echo esc_html( $tax ) . ' => name: ' . esc_html( $data['name'] ) . ', label: ' . esc_html( $data['label'] ) . ', terms: ' . count( $data['terms'] ) . ' | ';
+		}
+		echo 'Color attribute found: ' . ( $color_attribute ? 'YES - taxonomy: ' . esc_html( $color_taxonomy ) . ', terms count: ' . count( $color_attribute['terms'] ) : 'NO' );
+		echo ' -->';
+		
+		// Check if we found a color attribute and it has terms
+		if ( $color_attribute ) {
+			// Verify terms is an array and not empty
+			if ( ! is_array( $color_attribute['terms'] ) || empty( $color_attribute['terms'] ) ) {
+				// Try to get terms again without hide_empty
+				$terms = get_terms( array(
+					'taxonomy'   => $color_taxonomy,
+					'hide_empty' => false,
+				) );
+				if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
+					$color_attribute['terms'] = $terms;
+				}
+			}
+		}
+		
+		if ( $color_attribute && ! empty( $color_attribute['terms'] ) && is_array( $color_attribute['terms'] ) ) :
+			$current_color_values = isset( $current_attributes[ $color_taxonomy ] ) ? $current_attributes[ $color_taxonomy ] : array();
+			// For single selection, get the first selected color or empty
+			$selected_color = ! empty( $current_color_values ) ? $current_color_values[0] : '';
+		?>
+			<div class="shop-filter-group shop-filter-group-color">
+				<h3 class="shop-filter-title"><?php echo esc_html( $color_attribute['label'] ); ?></h3>
+				<div class="shop-filter-color-swatches">
+					<?php foreach ( $color_attribute['terms'] as $term ) : 
+						// Skip if term is not an object
+						if ( ! is_object( $term ) || ! isset( $term->slug ) ) {
+							continue;
+						}
+						$color_hex = basic_shop_theme_get_color_hex( $term->name, $color_taxonomy );
+						$is_selected = ( $term->slug === $selected_color );
+					?>
+						<label class="shop-filter-color-swatch-label">
+							<input 
+								type="radio" 
+								name="filter_<?php echo esc_attr( $color_attribute['name'] ); ?>" 
+								value="<?php echo esc_attr( $term->slug ); ?>"
+								class="shop-filter-color-radio"
+								<?php checked( $is_selected ); ?>
+							/>
+							<span 
+								class="shop-filter-color-swatch <?php echo $is_selected ? 'selected' : ''; ?>"
+								style="background-color: <?php echo esc_attr( $color_hex ); ?>;"
+								title="<?php echo esc_attr( $term->name ); ?>"
+								data-color-slug="<?php echo esc_attr( $term->slug ); ?>"
+							>
+								<span class="screen-reader-text"><?php echo esc_html( $term->name ); ?></span>
+							</span>
+						</label>
+					<?php endforeach; ?>
+				</div>
+			</div>
+		<?php endif; ?>
+
+		<!-- Product Attributes Filters (excluding color) -->
+		<?php foreach ( $product_attributes as $taxonomy => $data ) : 
+			// Skip color attribute as it's handled separately above
+			if ( $taxonomy === $color_taxonomy ) {
+				continue;
+			}
 			$current_attr_values = isset( $current_attributes[ $taxonomy ] ) ? $current_attributes[ $taxonomy ] : array();
-			?>
+		?>
 			<div class="shop-filter-group">
 				<h3 class="shop-filter-title"><?php echo esc_html( $data['label'] ); ?></h3>
 				<div class="shop-filter-options">

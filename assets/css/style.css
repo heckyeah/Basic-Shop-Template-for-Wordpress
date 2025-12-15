@@ -314,6 +314,40 @@ a:hover {
 	justify-content: flex-end;
 }
 
+/* Social Media Icons */
+.social-media-icons {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-sm);
+}
+
+.social-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	background-color: var(--color-black);
+	border-radius: 50%;
+	color: var(--color-white);
+	transition: var(--transition);
+	text-decoration: none;
+}
+
+.social-icon:hover {
+	background-color: var(--color-black);
+	color: var(--color-white);
+	opacity: 0.8;
+	transform: translateY(-2px);
+}
+
+.social-icon svg {
+	width: 16px;
+	height: 16px;
+	display: block;
+}
+
 /* Minicart */
 .minicart-wrapper {
 	position: relative;
@@ -803,6 +837,20 @@ button.secondary:hover {
 		display: block;
 		color: var(--color-black);
 		font-size: 1.5rem;
+	}
+
+	.social-media-icons {
+		gap: var(--spacing-xs);
+	}
+
+	.social-icon {
+		width: 29px;
+		height: 29px;
+	}
+
+	.social-icon svg {
+		width: 14px;
+		height: 14px;
 	}
 
 	.minicart-sidebar {

@@ -59,24 +59,110 @@
 			// Price slider sync with inputs
 			$('.shop-filter-price-slider').on('input', function() {
 				var $slider = $(this);
-				var $input = $slider.hasClass('shop-filter-price-slider-min') 
-					? $('input[name="filter_min_price"]')
-					: $('input[name="filter_max_price"]');
+				var isMin = $slider.hasClass('shop-filter-price-slider-min');
+				var $minInput = $('input[name="filter_min_price"]');
+				var $maxInput = $('input[name="filter_max_price"]');
+				var $minSlider = $('.shop-filter-price-slider-min');
+				var $maxSlider = $('.shop-filter-price-slider-max');
+				
 				// Round to whole dollar (no cents)
 				var roundedValue = Math.round(parseFloat($slider.val()) || 0);
-				$input.val(roundedValue);
+				
+				if (isMin) {
+					// Min slider changed
+					var maxValue = parseFloat($maxSlider.val()) || parseFloat($maxSlider.attr('max'));
+					if (roundedValue > maxValue) {
+						// Min can't be higher than max, set it to max
+						roundedValue = maxValue;
+						$slider.val(roundedValue);
+					}
+					$minInput.val(roundedValue);
+				} else {
+					// Max slider changed
+					var minValue = parseFloat($minSlider.val()) || parseFloat($minSlider.attr('min'));
+					if (roundedValue < minValue) {
+						// Max can't be lower than min, set it to min
+						roundedValue = minValue;
+						$slider.val(roundedValue);
+					}
+					$maxInput.val(roundedValue);
+				}
 			});
 
-			// Price input sync with slider
+			// Price input sync with slider and validate
 			$('.shop-filter-price-input').on('input', function() {
 				var $input = $(this);
-				var $slider = $input.attr('name') === 'filter_min_price'
-					? $('.shop-filter-price-slider-min')
-					: $('.shop-filter-price-slider-max');
+				var isMin = $input.attr('name') === 'filter_min_price';
+				var $minInput = $('input[name="filter_min_price"]');
+				var $maxInput = $('input[name="filter_max_price"]');
+				var $minSlider = $('.shop-filter-price-slider-min');
+				var $maxSlider = $('.shop-filter-price-slider-max');
+				
 				// Round to whole dollar (no cents)
 				var roundedValue = Math.round(parseFloat($input.val()) || 0);
-				$input.val(roundedValue);
-				$slider.val(roundedValue);
+				
+				if (isMin) {
+					// Min input changed
+					var maxValue = parseFloat($maxInput.val()) || parseFloat($maxSlider.attr('max'));
+					if (roundedValue > maxValue && $maxInput.val() !== '') {
+						// Min can't be higher than max, set it to max
+						roundedValue = maxValue;
+						$input.val(roundedValue);
+					}
+					$minSlider.val(roundedValue);
+				} else {
+					// Max input changed
+					var minValue = parseFloat($minInput.val()) || parseFloat($minSlider.attr('min'));
+					if (roundedValue < minValue && $minInput.val() !== '') {
+						// Max can't be lower than min, set it to min
+						roundedValue = minValue;
+						$input.val(roundedValue);
+					}
+					$maxSlider.val(roundedValue);
+				}
+			});
+			
+			// Validate on blur (when user leaves the input field)
+			$('.shop-filter-price-input').on('blur', function() {
+				var $input = $(this);
+				var isMin = $input.attr('name') === 'filter_min_price';
+				var $minInput = $('input[name="filter_min_price"]');
+				var $maxInput = $('input[name="filter_max_price"]');
+				var $minSlider = $('.shop-filter-price-slider-min');
+				var $maxSlider = $('.shop-filter-price-slider-max');
+				
+				var inputValue = parseFloat($input.val());
+				if (isNaN(inputValue) || inputValue === '') {
+					return; // Allow empty values
+				}
+				
+				var roundedValue = Math.round(inputValue);
+				
+				if (isMin) {
+					// Min input blurred
+					var maxValue = parseFloat($maxInput.val());
+					if (!isNaN(maxValue) && roundedValue > maxValue) {
+						// Min can't be higher than max, set it to max
+						roundedValue = maxValue;
+						$input.val(roundedValue);
+						$minSlider.val(roundedValue);
+					} else {
+						$input.val(roundedValue);
+						$minSlider.val(roundedValue);
+					}
+				} else {
+					// Max input blurred
+					var minValue = parseFloat($minInput.val());
+					if (!isNaN(minValue) && roundedValue < minValue) {
+						// Max can't be lower than min, set it to min
+						roundedValue = minValue;
+						$input.val(roundedValue);
+						$maxSlider.val(roundedValue);
+					} else {
+						$input.val(roundedValue);
+						$maxSlider.val(roundedValue);
+					}
+				}
 			});
 
 			// Handle filter tag removal (event delegation for dynamically added tags)
@@ -85,6 +171,37 @@
 				var $tag = $(this);
 				var filterType = $tag.data('filter-type');
 				self.removeFilter(filterType, $tag);
+			});
+			
+			// Handle color swatch clicks (radio buttons - single selection)
+			$('.shop-filter-color-swatch').on('click', function(e) {
+				e.preventDefault();
+				var $swatch = $(this);
+				var $radio = $swatch.siblings('.shop-filter-color-radio');
+				
+				// Uncheck all other color radios in the same group
+				var radioName = $radio.attr('name');
+				$('input[name="' + radioName + '"]').prop('checked', false);
+				$('input[name="' + radioName + '"]').siblings('.shop-filter-color-swatch').removeClass('selected');
+				
+				// Check this radio and update visual state
+				$radio.prop('checked', true);
+				$swatch.addClass('selected');
+			});
+			
+			// Sync radio state with swatch visual state
+			$('.shop-filter-color-radio').on('change', function() {
+				var $radio = $(this);
+				var radioName = $radio.attr('name');
+				var $swatch = $radio.siblings('.shop-filter-color-swatch');
+				
+				// Remove selected class from all swatches in this group
+				$('input[name="' + radioName + '"]').siblings('.shop-filter-color-swatch').removeClass('selected');
+				
+				// Add selected class to the checked one
+				if ($radio.is(':checked')) {
+					$swatch.addClass('selected');
+				}
 			});
 		},
 
@@ -122,6 +239,14 @@
 			// Round price values to whole dollars (no cents)
 			minPrice = minPrice ? Math.round(parseFloat(minPrice)) : '';
 			maxPrice = maxPrice ? Math.round(parseFloat(maxPrice)) : '';
+			
+			// Validate: max price cannot be lower than min price
+			if (minPrice && maxPrice && parseFloat(maxPrice) < parseFloat(minPrice)) {
+				// If max is lower than min, set max to min
+				maxPrice = minPrice;
+				$('input[name="filter_max_price"]').val(maxPrice);
+				$('.shop-filter-price-slider-max').val(maxPrice);
+			}
 			
 			var filterData = {
 				action: 'basic_shop_filter_products',
@@ -171,6 +296,8 @@
 
 		getSelectedAttributes: function() {
 			var attributes = {};
+			
+			// Handle checkboxes (multiple selection attributes)
 			$('#shop-filters-form input[type="checkbox"][name^="filter_"]').each(function() {
 				var name = $(this).attr('name');
 				if (name.indexOf('filter_category') === -1 && name.indexOf('filter_sale') === -1) {
@@ -184,11 +311,28 @@
 					}
 				}
 			});
+			
+			// Handle radio buttons (single selection - color attribute)
+			$('#shop-filters-form input[type="radio"][name^="filter_"]').each(function() {
+				var name = $(this).attr('name');
+				if (name.indexOf('filter_category') === -1 && name.indexOf('filter_sale') === -1 && name.indexOf('filter_stock') === -1) {
+					var attrName = name.replace('filter_', '');
+					var taxonomy = 'pa_' + attrName;
+					if ($(this).is(':checked')) {
+						// Radio buttons are single selection, so use array with one value
+						attributes[taxonomy] = [$(this).val()];
+					}
+				}
+			});
+			
 			return attributes;
 		},
 
 		updateProducts: function(html) {
 			$('#shop-products-grid-wrapper').html(html);
+			
+			// Trigger custom event for thumbnail slider initialization
+			$(document).trigger('shopProductsUpdated');
 			
 			// Scroll to top of products
 			$('html, body').animate({
@@ -273,7 +417,17 @@
 				case 'attribute':
 					var termSlug = $tag.data('filter-value');
 					var attrName = $tag.data('filter-attr-name');
-					$('input[name="filter_' + attrName + '[]"][value="' + termSlug + '"]').prop('checked', false);
+					// Check if it's a radio (color) or checkbox (other attributes)
+					var $input = $('input[name="filter_' + attrName + '"][value="' + termSlug + '"]');
+					if ($input.length === 0) {
+						// Try checkbox format
+						$input = $('input[name="filter_' + attrName + '[]"][value="' + termSlug + '"]');
+					}
+					$input.prop('checked', false);
+					// If it's a color filter, update swatch visual state
+					if ($input.hasClass('shop-filter-color-radio')) {
+						$input.siblings('.shop-filter-color-swatch').removeClass('selected');
+					}
 					break;
 			}
 			
@@ -331,7 +485,17 @@
 			for (var attr in filterData.attributes) {
 				if (filterData.attributes[attr].length > 0) {
 					var attrName = attr.replace('pa_', '');
-					url.searchParams.set('filter_' + attrName, filterData.attributes[attr].join(','));
+					// Check if this is a color attribute (single selection)
+					var attrNameLower = attrName.toLowerCase();
+					var isColorAttr = (attrNameLower.indexOf('color') !== -1 || attrNameLower.indexOf('colour') !== -1);
+					
+					if (isColorAttr && filterData.attributes[attr].length === 1) {
+						// Color attribute: single value (radio button)
+						url.searchParams.set('filter_' + attrName, filterData.attributes[attr][0]);
+					} else {
+						// Other attributes: multiple values (checkboxes)
+						url.searchParams.set('filter_' + attrName, filterData.attributes[attr].join(','));
+					}
 				} else {
 					var attrName = attr.replace('pa_', '');
 					url.searchParams.delete('filter_' + attrName);
@@ -353,6 +517,10 @@
 			$('.shop-filter-price-slider-max').val(priceRange.max);
 			$('input[name="filter_min_price"]').val('');
 			$('input[name="filter_max_price"]').val('');
+			
+			// Clear color swatch visual states and uncheck radios
+			$('.shop-filter-color-radio').prop('checked', false);
+			$('.shop-filter-color-swatch').removeClass('selected');
 
 			// Apply empty filters
 			this.applyFilters(1, '');
