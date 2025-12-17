@@ -11,49 +11,46 @@ get_header();
 <div id="primary" class="content-area">
 	<main id="main" class="site-main">
 
-		<?php if ( function_exists( 'is_woocommerce' ) ) : ?>
-			<section class="shop-products">
-				<?php
-				$args = array(
-					'post_type'      => 'product',
-					'posts_per_page' => 12,
-					'post_status'    => 'publish',
-				);
-
-				$products = new WP_Query( $args );
-
-				if ( $products->have_posts() ) :
-					// Set up WooCommerce loop
-					wc_set_loop_prop( 'name', 'homepage' );
-					wc_set_loop_prop( 'columns', 4 );
-					
-					woocommerce_product_loop_start();
-					
-					while ( $products->have_posts() ) :
-						$products->the_post();
-						wc_get_template_part( 'content', 'product' );
-					endwhile;
-					
-					woocommerce_product_loop_end();
-					
-					wp_reset_postdata();
-				else :
-					?>
-					<p><?php esc_html_e( 'No products found.', 'basic-shop-theme' ); ?></p>
-					<?php
-				endif;
+		<?php
+		// Get the front page content
+		$front_page_id = get_option( 'page_on_front' );
+		
+		if ( $front_page_id ) {
+			// If a static page is set as front page, get its content
+			$front_page = get_post( $front_page_id );
+			if ( $front_page ) {
 				?>
-			</section>
-		<?php else : ?>
-			<section class="page-content">
+				<article id="post-<?php echo esc_attr( $front_page_id ); ?>" <?php post_class( '', $front_page_id ); ?>>
+					
+					<div class="entry-content">
+						<?php
+						// Display the content from the WordPress editor
+						echo apply_filters( 'the_content', $front_page->post_content );
+						?>
+					</div>
+				</article>
 				<?php
-				while ( have_posts() ) :
-					the_post();
-					the_content();
-				endwhile;
+			}
+		} else {
+			// Fallback: if no static page is set, use the loop
+			while ( have_posts() ) :
+				the_post();
 				?>
-			</section>
-		<?php endif; ?>
+				<article id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
+					<?php if ( get_the_title() ) : ?>
+						<header class="entry-header">
+							<?php the_title( '<h1 class="entry-title">', '</h1>' ); ?>
+						</header>
+					<?php endif; ?>
+					
+					<div class="entry-content">
+						<?php the_content(); ?>
+					</div>
+				</article>
+				<?php
+			endwhile;
+		}
+		?>
 
 	</main>
 </div>
