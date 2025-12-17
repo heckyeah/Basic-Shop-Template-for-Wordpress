@@ -79,6 +79,35 @@ function basic_shop_theme_scripts() {
 	if ( is_shop() || is_product_category() || is_product_tag() || is_product_taxonomy() || is_product() ) {
 		wp_enqueue_script( 'basic-shop-theme-thumbnail-slider', get_template_directory_uri() . '/assets/js/product-thumbnail-slider.js', array( 'jquery' ), '1.0.0', true );
 	}
+	
+	// Front page product slider (Swiper)
+	if ( is_front_page() ) {
+		// Swiper CSS
+		wp_enqueue_style(
+			'swiper',
+			'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css',
+			array(),
+			'11.0.0'
+		);
+		
+		// Swiper JS
+		wp_enqueue_script(
+			'swiper',
+			'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js',
+			array(),
+			'11.0.0',
+			true
+		);
+		
+		// Front page product slider script
+		wp_enqueue_script(
+			'basic-shop-theme-front-page-slider',
+			get_template_directory_uri() . '/assets/js/front-page-product-slider.js',
+			array( 'swiper' ),
+			'1.0.0',
+			true
+		);
+	}
 
 	// Localize scripts
 	wp_localize_script( 'basic-shop-theme-minicart', 'basicShopAjax', array(
